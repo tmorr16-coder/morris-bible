@@ -17,12 +17,12 @@ export default async function ChallengesPage() {
   ]);
 
   const menuUser = { email: user.email, name: user.user_metadata?.full_name ?? user.email, avatarUrl: user.user_metadata?.avatar_url ?? null };
-  const joinedIds = new Set((joined ?? []).map((j: any) => j.challenge_id));
+  const joinedIds: string[] = (joined ?? []).map((j: any) => String(j.challenge_id));
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--color-bg)", paddingBottom: 80 }}>
       <PlatformMenu currentApp="bible" user={menuUser} />
-      <ChallengesClient challenges={challenges ?? []} joinedIds={[...joinedIds]} userId={user.id} />
+      <ChallengesClient challenges={challenges ?? []} joinedIds={joinedIds} userId={user.id} />
       <NavBar />
     </div>
   );
