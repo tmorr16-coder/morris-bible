@@ -1,0 +1,64 @@
+@import "tailwindcss";
+
+:root {
+  --color-bg:           #F7F4EE;
+  --color-bg-card:      #FFFDF8;
+  --color-bg-deep:      #ECE6D7;
+  --color-ink:          #1A1814;
+  --color-ink-2:        #423E37;
+  --color-ink-3:        #8A8278;
+  --color-ink-4:        #B8AF9F;
+  --color-rule:         #E0D9C7;
+  --color-rule-soft:    #EFE9D9;
+  --color-accent:       #6B3B7C;   /* Bible — deep plum/royal purple */
+  --color-accent-dark:  #4A2857;
+  --color-accent-soft:  #EDE5F3;
+  --color-green:        #4A6B3A;
+  --color-red:          #9A3B2A;
+  --color-amber:        #B88A2E;
+  --shadow-card: 0 1px 0 rgba(26,24,20,0.04), 0 0 0 1px rgba(26,24,20,0.04);
+  --font-sans:    var(--font-geist), system-ui, sans-serif;
+  --font-display: var(--font-instrument-serif), serif;
+  --font-mono:    var(--font-jetbrains-mono), monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.serif { font-family: var(--font-display); }
+.mono  { font-family: var(--font-mono); }
+
+/* Bible reader prose */
+.bible-prose {
+  font-family: var(--font-display);
+  font-size: 17px;
+  line-height: 1.8;
+  color: var(--color-ink);
+}
+
+.verse-number {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--color-accent);
+  vertical-align: super;
+  margin-right: 3px;
+  font-family: var(--font-sans);
+  letter-spacing: 0.02em;
+}
+
+.verse-text {
+  display: inline;
+}
+
+.verse-text.highlighted-yellow { background: rgba(184,138,46,0.2); border-radius: 2px; }
+.verse-text.highlighted-blue   { background: rgba(59,92,127,0.15); border-radius: 2px; }
+.verse-text.highlighted-green  { background: rgba(74,107,58,0.15); border-radius: 2px; }
+.verse-text.highlighted-pink   { background: rgba(154,59,90,0.15); border-radius: 2px; }
