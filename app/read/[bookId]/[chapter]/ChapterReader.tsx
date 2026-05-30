@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -22,10 +22,10 @@ interface Props {
 }
 
 const HIGHLIGHT_COLORS = [
-  { key: "yellow", label: "🟡", bg: "rgba(184,138,46,0.25)" },
-  { key: "blue",   label: "🔵", bg: "rgba(59,92,127,0.2)"  },
-  { key: "green",  label: "🟢", bg: "rgba(74,107,58,0.2)"  },
-  { key: "pink",   label: "🩷", bg: "rgba(154,59,90,0.2)"  },
+  { key: "yellow", label: "Gold",  bg: "rgba(184,138,46,0.22)",  dot: "#B88A2E" },
+  { key: "blue",   label: "Blue",  bg: "rgba(59,92,127,0.18)",   dot: "#3B5C7F" },
+  { key: "green",  label: "Green", bg: "rgba(74,107,58,0.18)",   dot: "#4A6B3A" },
+  { key: "pink",   label: "Rose",  bg: "rgba(154,59,90,0.18)",   dot: "#9A3B5A" },
 ];
 
 export default function ChapterReader({
@@ -33,68 +33,148 @@ export default function ChapterReader({
   prevChapter, nextChapter, userId, initialHighlights, initialBookmarks, initialNotes, bibleId,
 }: Props) {
   const router = useRouter();
+  const db = createClient() as any;
+
+  // ── Core state ────────────────────────────────────────────
   const [highlights, setHighlights] = useState<Record<string, string>>(
     Object.fromEntries(initialHighlights.map((h) => [h.verse_id, h.color]))
   );
   const [bookmarked, setBookmarked] = useState(initialBookmarks.length > 0);
-  const [notes, setNotes] = useState<Record<string, string>>(
+  const [notes, setNotes] = useState<Record<number, string>>(
     Object.fromEntries(initialNotes.map((n) => [n.verse_start ?? 0, n.content]))
   );
   const [selectedVerse, setSelectedVerse] = useState<BibleVerse | null>(null);
   const [noteText, setNoteText] = useState("");
   const [savingNote, setSavingNote] = useState(false);
-  const [activeColor, setActiveColor] = useState("yellow");
 
-  // TTS state
+  // ── TTS state ─────────────────────────────────────────────
   const [speaking, setSpeaking] = useState(false);
-  const [ttsVoice, setTtsVoice] = useState<SpeechSynthesisVoice | null>(null);
+  const [paused, setPaused] = useState(false);
+  const [readingVerseIdx, setReadingVerseIdx] = useState<number | null>(null);
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [selectedVoice, setSelectedVoice] = useState<SpeechSynthesisVoice | null>(null);
+  const [speechRate, setSpeechRate] = useState(0.88);
+  const [showVoicePicker, setShowVoicePicker] = useState(false);
   const utterRef = useRef<SpeechSynthesisUtterance | null>(null);
 
-  const db = createClient() as any;
+  // Load available English voices
+  useEffect(() => {
+    function loadVoices() {
+      const all = window.speechSynthesis.getVoices();
+      const english = all.filter(
+        (v) => v.lang.startsWith("en") && !v.name.includes("(compact)")
+      );
+      if (english.length > 0) {
+        setVoices(english);
+        // Default: prefer a natural-sounding US voice
+        const preferred = english.find(
+          (v) =>
+            v.name.includes("Google US English") ||
+            v.name.includes("Samantha") ||
+            v.name.includes("Alex") ||
+            v.name === "Karen" ||
+            v.name === "Daniel"
+        );
+        setSelectedVoice(preferred ?? english[0]);
+      }
+    }
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+    return () => { window.speechSynthesis.onvoiceschanged = null; };
+  }, []);
 
-  // ── TTS ──────────────────────────────────────────────────────────
-  const speak = useCallback(() => {
+  // ── TTS ── speak from a specific verse index ──────────────
+  const speakFrom = useCallback((startIdx: number) => {
     if (!chapterData) return;
     window.speechSynthesis.cancel();
-    const text = chapterData.verses.map((v) => `Verse ${v.number}. ${v.text}`).join(" ");
-    const utter = new SpeechSynthesisUtterance(text);
-    utter.rate = 0.9;
+    setPaused(false);
+
+    const verses = chapterData.verses.slice(startIdx);
+
+    // Build full text + per-verse character offsets for onboundary tracking
+    let fullText = "";
+    const offsets: number[] = []; // offsets[i] = char index where verse startIdx+i begins
+    verses.forEach((v) => {
+      offsets.push(fullText.length);
+      fullText += v.text + "  "; // double-space between verses
+    });
+
+    const utter = new SpeechSynthesisUtterance(fullText);
+    utter.rate = speechRate;
     utter.pitch = 1;
-    if (ttsVoice) utter.voice = ttsVoice;
-    utter.onstart = () => setSpeaking(true);
-    utter.onend = () => setSpeaking(false);
-    utter.onerror = () => setSpeaking(false);
+    if (selectedVoice) utter.voice = selectedVoice;
+
+    utter.onstart = () => {
+      setSpeaking(true);
+      setReadingVerseIdx(startIdx);
+    };
+
+    utter.onboundary = (e) => {
+      if (e.name !== "word") return;
+      const charIdx = e.charIndex;
+      // Find which verse is being read
+      let currentVerse = startIdx;
+      for (let i = 0; i < offsets.length; i++) {
+        if (charIdx >= offsets[i]) currentVerse = startIdx + i;
+        else break;
+      }
+      setReadingVerseIdx(currentVerse);
+    };
+
+    utter.onend = () => {
+      setSpeaking(false);
+      setPaused(false);
+      setReadingVerseIdx(null);
+    };
+    utter.onerror = () => {
+      setSpeaking(false);
+      setPaused(false);
+      setReadingVerseIdx(null);
+    };
+
     utterRef.current = utter;
     window.speechSynthesis.speak(utter);
-  }, [chapterData, ttsVoice]);
+  }, [chapterData, selectedVoice, speechRate]);
+
+  const pauseResume = useCallback(() => {
+    if (!speaking) return;
+    if (paused) {
+      window.speechSynthesis.resume();
+      setPaused(false);
+    } else {
+      window.speechSynthesis.pause();
+      setPaused(true);
+    }
+  }, [speaking, paused]);
 
   const stopSpeaking = useCallback(() => {
     window.speechSynthesis.cancel();
     setSpeaking(false);
+    setPaused(false);
+    setReadingVerseIdx(null);
   }, []);
 
-  // ── Highlight ─────────────────────────────────────────────────────
+  // ── Highlight ─────────────────────────────────────────────
   const toggleHighlight = async (verse: BibleVerse, color: string) => {
-    const verseId = verse.id;
-    const existing = highlights[verseId];
+    const vId = verse.id;
+    const existing = highlights[vId];
     if (existing === color) {
-      // Remove highlight
       const next = { ...highlights };
-      delete next[verseId];
+      delete next[vId];
       setHighlights(next);
       await db.schema("bible").from("highlights").delete()
-        .eq("user_id", userId).eq("bible_id", bibleId).eq("verse_id", verseId);
+        .eq("user_id", userId).eq("bible_id", bibleId).eq("verse_id", vId);
     } else {
-      setHighlights({ ...highlights, [verseId]: color });
+      setHighlights({ ...highlights, [vId]: color });
       await db.schema("bible").from("highlights").upsert({
         user_id: userId, bible_id: bibleId,
-        reference: verse.reference, verse_id: verseId, color,
+        reference: verse.reference, verse_id: vId, color,
       }, { onConflict: "user_id,bible_id,verse_id" });
     }
     setSelectedVerse(null);
   };
 
-  // ── Bookmark ──────────────────────────────────────────────────────
+  // ── Bookmark ──────────────────────────────────────────────
   const toggleBookmark = async () => {
     if (bookmarked) {
       setBookmarked(false);
@@ -111,7 +191,7 @@ export default function ChapterReader({
     }
   };
 
-  // ── Save note ─────────────────────────────────────────────────────
+  // ── Save note ─────────────────────────────────────────────
   const saveNote = async () => {
     if (!selectedVerse || !noteText.trim()) return;
     setSavingNote(true);
@@ -128,171 +208,339 @@ export default function ChapterReader({
     setSelectedVerse(null);
   };
 
+  // ── Voice name shortener ──────────────────────────────────
+  const shortVoiceName = (v: SpeechSynthesisVoice) =>
+    v.name.replace(/\(.*?\)/g, "").replace("Google", "").trim();
+
   return (
-    <div style={{ maxWidth: 720, margin: "0 auto", padding: "20px" }}>
-      {/* Chapter header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
-        <div>
-          <div style={{ fontSize: 11, color: "var(--color-ink-3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-            {book.testament === "OT" ? "Old Testament" : "New Testament"}
-          </div>
-          <h1 style={{ fontFamily: "var(--font-instrument-serif, serif)", fontSize: 28, fontWeight: 400, margin: "4px 0 0" }}>
+    <div style={{ maxWidth: "var(--reader-width)", margin: "0 auto", padding: "24px 20px 120px" }}>
+
+      {/* ── Header ── */}
+      <div style={{ marginBottom: 28 }}>
+        <div style={{
+          fontSize: 10, color: "var(--color-ink-4)", fontWeight: 700,
+          textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 6,
+        }}>
+          {book.testament === "OT" ? "Old Testament" : "New Testament"}
+        </div>
+
+        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+          <h1 style={{
+            fontFamily: "var(--font-display)", fontSize: 36, fontWeight: 400,
+            margin: 0, letterSpacing: "-0.01em", lineHeight: 1,
+          }}>
             {book.name} {chapterNum}
           </h1>
-        </div>
 
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          {/* Version picker */}
+          {/* Controls */}
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            {/* Version */}
+            <select
+              value={bibleId}
+              onChange={(e) => router.push(`/read/${book.id}/${chapterNum}?v=${e.target.value}`)}
+              style={{
+                padding: "6px 10px", borderRadius: 8, border: "1px solid var(--color-rule)",
+                background: "var(--color-bg-card)", fontSize: 12, fontFamily: "inherit",
+                color: "var(--color-ink)", cursor: "pointer",
+              }}
+            >
+              {allVersions.map((v) => (
+                <option key={v.id} value={v.id}>{v.abbreviation}</option>
+              ))}
+            </select>
+
+            {/* Bookmark */}
+            <button onClick={toggleBookmark}
+              title={bookmarked ? "Remove bookmark" : "Bookmark"}
+              style={{
+                background: bookmarked ? "var(--color-accent-soft)" : "var(--color-bg-card)",
+                border: "1px solid var(--color-rule)", borderRadius: 8,
+                padding: "6px 10px", cursor: "pointer", fontSize: 14,
+              }}>
+              {bookmarked ? "🔖" : "🗂"}
+            </button>
+
+            {/* Read aloud from start */}
+            {!speaking ? (
+              <button onClick={() => speakFrom(0)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  padding: "7px 14px", borderRadius: 8, border: "none",
+                  background: "var(--color-accent)", color: "#fff",
+                  fontSize: 12, fontWeight: 600, cursor: "pointer",
+                }}>
+                ▶ Read aloud
+              </button>
+            ) : (
+              <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={pauseResume}
+                  style={{
+                    padding: "7px 14px", borderRadius: 8, border: "none",
+                    background: "var(--color-accent)", color: "#fff",
+                    fontSize: 12, fontWeight: 600, cursor: "pointer",
+                  }}>
+                  {paused ? "▶ Resume" : "⏸ Pause"}
+                </button>
+                <button onClick={stopSpeaking}
+                  style={{
+                    padding: "7px 12px", borderRadius: 8,
+                    border: "1px solid var(--color-rule)",
+                    background: "var(--color-bg-card)", color: "var(--color-ink-2)",
+                    fontSize: 12, cursor: "pointer",
+                  }}>
+                  ⏹
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── TTS Settings Bar ── */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap",
+        padding: "10px 14px", borderRadius: 10,
+        background: "var(--color-bg-deep)",
+        border: "1px solid var(--color-rule)",
+        marginBottom: 24, fontSize: 12,
+      }}>
+        {/* Voice picker */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ color: "var(--color-ink-3)", fontWeight: 600 }}>Voice</span>
           <select
-            value={bibleId}
-            onChange={(e) => router.push(`/read/${book.id}/${chapterNum}?v=${e.target.value}`)}
+            value={selectedVoice?.name ?? ""}
+            onChange={(e) => setSelectedVoice(voices.find((v) => v.name === e.target.value) ?? null)}
             style={{
-              padding: "6px 10px", borderRadius: 8, border: "1px solid var(--color-rule)",
-              background: "var(--color-bg-card)", fontSize: 12, fontFamily: "inherit",
-              color: "var(--color-ink)", cursor: "pointer",
+              padding: "4px 8px", borderRadius: 6, border: "1px solid var(--color-rule)",
+              background: "var(--color-bg-card)", fontSize: 11, fontFamily: "inherit",
+              color: "var(--color-ink)", cursor: "pointer", maxWidth: 180,
             }}
           >
-            {allVersions.map((v) => (
-              <option key={v.id} value={v.id}>{v.abbreviation} — {v.name}</option>
+            {voices.map((v) => (
+              <option key={v.name} value={v.name}>{shortVoiceName(v)} ({v.lang})</option>
             ))}
           </select>
-
-          {/* Bookmark */}
-          <button onClick={toggleBookmark} title={bookmarked ? "Remove bookmark" : "Bookmark chapter"}
-            style={{ background: "transparent", border: "none", fontSize: 20, cursor: "pointer" }}>
-            {bookmarked ? "🔖" : "📄"}
-          </button>
-
-          {/* TTS */}
-          <button onClick={speaking ? stopSpeaking : speak}
-            title={speaking ? "Stop reading" : "Read aloud"}
-            style={{
-              padding: "6px 14px", borderRadius: 8,
-              background: speaking ? "var(--color-accent)" : "var(--color-bg-deep)",
-              color: speaking ? "#fff" : "var(--color-ink)",
-              border: "none", fontSize: 12, cursor: "pointer", fontWeight: 500,
-              display: "flex", alignItems: "center", gap: 6,
-            }}>
-            {speaking ? "⏸ Stop" : "▶ Read aloud"}
-          </button>
         </div>
+
+        {/* Speed */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ color: "var(--color-ink-3)", fontWeight: 600 }}>Speed</span>
+          <input
+            type="range" min={0.5} max={1.4} step={0.05}
+            value={speechRate}
+            onChange={(e) => setSpeechRate(parseFloat(e.target.value))}
+            style={{ width: 80, accentColor: "var(--color-accent)" }}
+          />
+          <span style={{ color: "var(--color-ink-3)", minWidth: 28 }}>{speechRate.toFixed(2)}×</span>
+        </div>
+
+        {/* Reading indicator */}
+        {speaking && readingVerseIdx !== null && chapterData && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--color-accent)", fontWeight: 600 }}>
+            <span style={{ animation: "pulse 1s infinite", display: "inline-block" }}>♪</span>
+            v.{chapterData.verses[readingVerseIdx]?.number}
+          </div>
+        )}
       </div>
 
-      {/* Chapter navigation */}
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20 }}>
+      {/* ── Chapter navigation ── */}
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 28, fontSize: 13 }}>
         {prevChapter
-          ? <Link href={`/read/${book.id}/${prevChapter}?v=${bibleId}`} style={{ fontSize: 13, color: "var(--color-accent)", textDecoration: "none" }}>← {book.name} {prevChapter}</Link>
+          ? <Link href={`/read/${book.id}/${prevChapter}?v=${bibleId}`} style={{ color: "var(--color-accent)", textDecoration: "none" }}>← Ch. {prevChapter}</Link>
           : <span />}
-        <Link href="/read" style={{ fontSize: 13, color: "var(--color-ink-3)", textDecoration: "none" }}>All books</Link>
+        <Link href="/read" style={{ color: "var(--color-ink-3)", textDecoration: "none" }}>All books</Link>
         {nextChapter
-          ? <Link href={`/read/${book.id}/${nextChapter}?v=${bibleId}`} style={{ fontSize: 13, color: "var(--color-accent)", textDecoration: "none" }}>{book.name} {nextChapter} →</Link>
+          ? <Link href={`/read/${book.id}/${nextChapter}?v=${bibleId}`} style={{ color: "var(--color-accent)", textDecoration: "none" }}>Ch. {nextChapter} →</Link>
           : <span />}
       </div>
 
-      {/* Error state */}
+      {/* ── Error state ── */}
       {!chapterData && (
         <div style={{ textAlign: "center", padding: "60px 0", color: "var(--color-ink-3)" }}>
           <div style={{ fontSize: 32, marginBottom: 12 }}>⚠️</div>
           <div style={{ fontWeight: 600 }}>Unable to load this chapter</div>
-          <div style={{ fontSize: 13, marginTop: 4 }}>Check that BIBLE_API_KEY is set, or try KJV/ASV/WEB.</div>
+          <div style={{ fontSize: 13, marginTop: 4 }}>Set BIBLE_API_KEY for all versions, or choose KJV / ASV / WEB.</div>
         </div>
       )}
 
-      {/* Verses */}
+      {/* ── Verse text ── */}
       {chapterData && (
-        <div className="bible-prose" style={{ position: "relative" }}>
-          {chapterData.verses.map((verse) => {
+        <div className="bible-prose">
+          {chapterData.verses.map((verse, idx) => {
             const hlColor = highlights[verse.id];
-            const hlDef = HIGHLIGHT_COLORS.find((c) => c.key === hlColor);
-            const hasNote = notes[verse.number];
+            const hlDef   = HIGHLIGHT_COLORS.find((c) => c.key === hlColor);
+            const hasNote  = notes[verse.number];
+            const isReading = readingVerseIdx === idx;
+
             return (
-              <span
-                key={verse.id}
-                style={{ cursor: "pointer" }}
-                onClick={() => setSelectedVerse(selectedVerse?.id === verse.id ? null : verse)}
-              >
-                <sup className="verse-number">{verse.number}</sup>
-                <span
-                  className={`verse-text${hlColor ? ` highlighted-${hlColor}` : ""}`}
-                  style={hlDef ? { background: hlDef.bg, borderRadius: 3, padding: "0 1px" } : {}}
+              <span key={verse.id} className={`verse-wrap${isReading ? " reading-active" : ""}`}>
+                {/* Play-from-here button (shown on hover via CSS) */}
+                <button
+                  className="verse-play-btn"
+                  title={`Read aloud from verse ${verse.number}`}
+                  onClick={(e) => { e.stopPropagation(); speakFrom(idx); }}
                 >
-                  {verse.text}{" "}
+                  ▶
+                </button>
+                <sup
+                  className="verse-number"
+                  onClick={() => setSelectedVerse(selectedVerse?.id === verse.id ? null : verse)}
+                  style={{ cursor: "pointer" }}
+                >
+                  {verse.number}
+                </sup>
+                <span
+                  className={`verse-text${hlColor ? ` hl-${hlColor}` : ""}`}
+                  style={hlDef ? { background: hlDef.bg } : {}}
+                  onClick={() => setSelectedVerse(selectedVerse?.id === verse.id ? null : verse)}
+                >
+                  {verse.text}
                 </span>
                 {hasNote && (
-                  <span title="You have a note here" style={{ fontSize: 10, color: "var(--color-accent)", verticalAlign: "super" }}>✏</span>
-                )}
+                  <span
+                    title="You have a note here"
+                    style={{ fontSize: 9, color: "var(--color-accent)", verticalAlign: "super", marginLeft: 2, cursor: "pointer" }}
+                    onClick={() => setSelectedVerse(verse)}
+                  >✎</span>
+                )}{" "}
               </span>
             );
           })}
         </div>
       )}
 
-      {/* Verse action panel */}
+      {/* ── Bottom chapter nav ── */}
+      {chapterData && (
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 48, paddingTop: 20, borderTop: "1px solid var(--color-rule)", fontSize: 13 }}>
+          {prevChapter
+            ? <Link href={`/read/${book.id}/${prevChapter}?v=${bibleId}`} style={{
+                display: "flex", alignItems: "center", gap: 6,
+                color: "var(--color-accent)", textDecoration: "none", fontWeight: 500,
+              }}>← {book.name} {prevChapter}</Link>
+            : <span />}
+          {nextChapter
+            ? <Link href={`/read/${book.id}/${nextChapter}?v=${bibleId}`} style={{
+                display: "flex", alignItems: "center", gap: 6,
+                color: "var(--color-accent)", textDecoration: "none", fontWeight: 500,
+              }}>{book.name} {nextChapter} →</Link>
+            : <span />}
+        </div>
+      )}
+
+      {/* ── Verse action panel (fixed bottom) ── */}
       {selectedVerse && (
         <div style={{
-          position: "fixed", bottom: 80, left: 0, right: 0, zIndex: 60,
+          position: "fixed", bottom: 72, left: 0, right: 0, zIndex: 60,
           display: "flex", justifyContent: "center", padding: "0 16px",
+          pointerEvents: "none",
         }}>
           <div style={{
-            background: "#fff", border: "1px solid var(--color-rule)",
-            borderRadius: 16, padding: "16px 20px",
-            boxShadow: "0 8px 32px rgba(0,0,0,0.15)",
+            background: "var(--color-bg-card)",
+            border: "1px solid var(--color-rule)",
+            borderRadius: 18,
+            padding: "18px 22px",
+            boxShadow: "var(--shadow-float)",
             width: "100%", maxWidth: 680,
+            pointerEvents: "all",
           }}>
-            <div style={{ fontSize: 11, color: "var(--color-accent)", fontWeight: 600, marginBottom: 8 }}>
-              {selectedVerse.reference}
+            {/* Reference + play this verse */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+              <div style={{ fontSize: 11, color: "var(--color-accent)", fontWeight: 700, letterSpacing: "0.05em" }}>
+                {selectedVerse.reference}
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  onClick={() => {
+                    const idx = chapterData?.verses.findIndex((v) => v.id === selectedVerse.id) ?? 0;
+                    speakFrom(idx);
+                    setSelectedVerse(null);
+                  }}
+                  style={{
+                    padding: "4px 10px", borderRadius: 6, border: "1px solid var(--color-rule)",
+                    background: "var(--color-bg-deep)", fontSize: 11, cursor: "pointer",
+                    display: "flex", alignItems: "center", gap: 4,
+                  }}
+                >
+                  ▶ Read from here
+                </button>
+                <button
+                  onClick={() => setSelectedVerse(null)}
+                  style={{
+                    padding: "4px 10px", borderRadius: 6, border: "1px solid var(--color-rule)",
+                    background: "transparent", fontSize: 11, cursor: "pointer", color: "var(--color-ink-3)",
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
             </div>
-            <div style={{ fontSize: 13, color: "var(--color-ink-2)", marginBottom: 12, fontFamily: "var(--font-instrument-serif, serif)", lineHeight: 1.6 }}>
+
+            {/* Verse text */}
+            <div style={{
+              fontSize: 15, color: "var(--color-ink-2)", marginBottom: 14,
+              fontFamily: "var(--font-display)", lineHeight: 1.65,
+              borderLeft: "3px solid var(--color-accent-soft)", paddingLeft: 12,
+            }}>
               {selectedVerse.text}
             </div>
 
             {/* Highlight colors */}
-            <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-              <span style={{ fontSize: 11, color: "var(--color-ink-3)", alignSelf: "center" }}>Highlight:</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+              <span style={{ fontSize: 11, color: "var(--color-ink-3)", fontWeight: 600 }}>Highlight</span>
               {HIGHLIGHT_COLORS.map((c) => (
-                <button key={c.key} onClick={() => toggleHighlight(selectedVerse, c.key)}
+                <button
+                  key={c.key}
+                  onClick={() => toggleHighlight(selectedVerse, c.key)}
+                  title={c.label}
                   style={{
-                    width: 28, height: 28, borderRadius: "50%",
-                    background: c.bg, border: highlights[selectedVerse.id] === c.key ? "2px solid #1a1a1a" : "2px solid transparent",
-                    cursor: "pointer", fontSize: 14,
+                    width: 24, height: 24, borderRadius: "50%",
+                    background: c.bg,
+                    border: highlights[selectedVerse.id] === c.key
+                      ? `2px solid ${c.dot}` : "2px solid transparent",
+                    cursor: "pointer", position: "relative",
                   }}
-                  title={c.key}
                 >
-                  {c.label}
+                  {highlights[selectedVerse.id] === c.key && (
+                    <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10 }}>✓</span>
+                  )}
                 </button>
               ))}
+              {highlights[selectedVerse.id] && (
+                <button
+                  onClick={() => toggleHighlight(selectedVerse, highlights[selectedVerse.id])}
+                  style={{ fontSize: 10, color: "var(--color-ink-4)", background: "none", border: "none", cursor: "pointer" }}
+                >
+                  clear
+                </button>
+              )}
             </div>
 
             {/* Note */}
             <textarea
-              placeholder="Add a note for this verse…"
-              value={noteText || notes[selectedVerse.number] || ""}
+              placeholder={notes[selectedVerse.number] ? "Edit note…" : "Add a note…"}
+              defaultValue={notes[selectedVerse.number] ?? ""}
               onChange={(e) => setNoteText(e.target.value)}
+              rows={2}
               style={{
-                width: "100%", minHeight: 60, padding: "8px 10px",
+                width: "100%", padding: "8px 12px",
                 border: "1px solid var(--color-rule)", borderRadius: 8,
-                fontSize: 13, fontFamily: "inherit", resize: "vertical",
-                boxSizing: "border-box", marginBottom: 10,
+                fontSize: 13, fontFamily: "inherit", resize: "none",
+                boxSizing: "border-box", background: "var(--color-bg)",
+                marginBottom: 10,
               }}
             />
 
-            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-              <button onClick={() => setSelectedVerse(null)} style={{
-                padding: "6px 14px", borderRadius: 8, border: "1px solid var(--color-rule)",
-                background: "transparent", fontSize: 12, cursor: "pointer",
-              }}>
-                Close
-              </button>
-              {noteText.trim() && (
+            {noteText.trim() && (
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
                 <button onClick={saveNote} disabled={savingNote} style={{
-                  padding: "6px 14px", borderRadius: 8, border: "none",
+                  padding: "6px 16px", borderRadius: 8, border: "none",
                   background: "var(--color-accent)", color: "#fff",
                   fontSize: 12, fontWeight: 600, cursor: "pointer",
                 }}>
                   {savingNote ? "Saving…" : "Save note"}
                 </button>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
       )}

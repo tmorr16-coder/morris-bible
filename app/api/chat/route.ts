@@ -20,32 +20,53 @@ Guidelines:
 Respond in plain text (no markdown headers), using paragraph breaks for readability.`;
 
 export async function POST(req: NextRequest) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return new Response("Unauthorized", { status: 401 });
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return new Response("Unauthorized", { status: 401 });
 
-  const { messages } = await req.json();
+    const { messages } = await req.json();
 
-  const stream = await anthropic.messages.stream({
-    model: "claude-haiku-4-5",
-    max_tokens: 1024,
-    system: SYSTEM,
-    messages: messages.map((m: any) => ({ role: m.role, content: m.content })),
-  });
+    const encoder = new TextEncoder();
+    const readable = new ReadableStream({
+      async start(controller) {
+        try {
+          const stream = await anthropic.messages.stream({
+            model: "claude-haiku-4-5",
+            max_tokens: 1024,
+            system: SYSTEM,
+            messages: messages.map((m: { role: string; content: string }) => ({
+              role: m.role,
+              content: m.content,
+            })),
+          });
 
-  const encoder = new TextEncoder();
-  const readable = new ReadableStream({
-    async start(controller) {
-      for await (const chunk of stream) {
-        if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
-          controller.enqueue(encoder.encode(chunk.delta.text));
+          for await (const chunk of stream) {
+            if (
+              chunk.type === "content_block_delta" &&
+              chunk.delta.type === "text_delta"
+            ) {
+              controller.enqueue(encoder.encode(chunk.delta.text));
+            }
+          }
+          controller.close();
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "AI error";
+          controller.enqueue(encoder.encode(`\n\n[Error: ${msg}]`));
+          controller.close();
         }
-      }
-      controller.close();
-    },
-  });
+      },
+    });
 
-  return new Response(readable, {
-    headers: { "Content-Type": "text/plain; charset=utf-8", "Transfer-Encoding": "chunked" },
-  });
+    return new Response(readable, {
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-cache",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Server error";
+    return new Response(msg, { status: 500 });
+  }
 }

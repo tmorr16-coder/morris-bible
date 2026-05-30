@@ -1,64 +1,100 @@
 @import "tailwindcss";
 
 :root {
-  --color-bg:           #F7F4EE;
-  --color-bg-card:      #FFFDF8;
-  --color-bg-deep:      #ECE6D7;
-  --color-ink:          #1A1814;
-  --color-ink-2:        #423E37;
+  --color-bg:           #F5F0E8;
+  --color-bg-card:      #FDFAF4;
+  --color-bg-deep:      #EAE3D2;
+  --color-ink:          #1C1814;
+  --color-ink-2:        #3F3B34;
   --color-ink-3:        #8A8278;
   --color-ink-4:        #B8AF9F;
-  --color-rule:         #E0D9C7;
-  --color-rule-soft:    #EFE9D9;
-  --color-accent:       #6B3B7C;   /* Bible — deep plum/royal purple */
+  --color-rule:         #DDD6C4;
+  --color-rule-soft:    #EDE7D8;
+  --color-accent:       #6B3B7C;
   --color-accent-dark:  #4A2857;
   --color-accent-soft:  #EDE5F3;
   --color-green:        #4A6B3A;
   --color-red:          #9A3B2A;
   --color-amber:        #B88A2E;
-  --shadow-card: 0 1px 0 rgba(26,24,20,0.04), 0 0 0 1px rgba(26,24,20,0.04);
-  --font-sans:    var(--font-geist), system-ui, sans-serif;
-  --font-display: var(--font-instrument-serif), serif;
-  --font-mono:    var(--font-jetbrains-mono), monospace;
+  --shadow-card:        0 1px 3px rgba(26,24,20,0.06), 0 0 0 1px rgba(26,24,20,0.04);
+  --shadow-float:       0 8px 32px rgba(26,24,20,0.14), 0 0 0 1px rgba(26,24,20,0.06);
+  --font-sans:          var(--font-geist), system-ui, sans-serif;
+  --font-display:       var(--font-instrument-serif), Georgia, serif;
+  --font-mono:          var(--font-jetbrains-mono), monospace;
+  --reader-width:       660px;
 }
 
 * { box-sizing: border-box; }
 
-body {
+html, body {
   background: var(--color-bg);
   color: var(--color-ink);
   font-family: var(--font-sans);
   font-size: 15px;
   line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
   margin: 0;
 }
 
 .serif { font-family: var(--font-display); }
 .mono  { font-family: var(--font-mono); }
 
-/* Bible reader prose */
+/* ── Bible reader prose ───────────────────────────────────── */
 .bible-prose {
   font-family: var(--font-display);
-  font-size: 17px;
-  line-height: 1.8;
+  font-size: 19px;
+  line-height: 2.05;
   color: var(--color-ink);
+  letter-spacing: 0.01em;
+}
+
+.verse-wrap {
+  display: inline;
+  position: relative;
+  border-radius: 3px;
+  transition: background 120ms;
+}
+
+.verse-wrap.reading-active {
+  background: rgba(107, 59, 124, 0.10);
+  border-radius: 3px;
 }
 
 .verse-number {
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
-  color: var(--color-accent);
+  color: var(--color-ink-4);
   vertical-align: super;
   margin-right: 3px;
+  margin-left: 2px;
   font-family: var(--font-sans);
-  letter-spacing: 0.02em;
+  letter-spacing: 0.05em;
+  user-select: none;
 }
 
-.verse-text {
+.verse-play-btn {
+  display: none;
+  font-size: 8px;
+  vertical-align: super;
+  margin-right: 2px;
+  cursor: pointer;
+  color: var(--color-accent);
+  background: none;
+  border: none;
+  padding: 0 2px;
+  line-height: 1;
+  user-select: none;
+}
+
+.verse-wrap:hover .verse-play-btn {
   display: inline;
 }
 
-.verse-text.highlighted-yellow { background: rgba(184,138,46,0.2); border-radius: 2px; }
-.verse-text.highlighted-blue   { background: rgba(59,92,127,0.15); border-radius: 2px; }
-.verse-text.highlighted-green  { background: rgba(74,107,58,0.15); border-radius: 2px; }
-.verse-text.highlighted-pink   { background: rgba(154,59,90,0.15); border-radius: 2px; }
+.verse-text { display: inline; }
+
+/* Highlight variants */
+.verse-text.hl-yellow { background: rgba(184,138,46,0.22); border-radius: 2px; padding: 0 1px; }
+.verse-text.hl-blue   { background: rgba(59,92,127,0.18);  border-radius: 2px; padding: 0 1px; }
+.verse-text.hl-green  { background: rgba(74,107,58,0.18);  border-radius: 2px; padding: 0 1px; }
+.verse-text.hl-pink   { background: rgba(154,59,90,0.18);  border-radius: 2px; padding: 0 1px; }
