@@ -7,12 +7,13 @@ import ChapterReader from "./ChapterReader";
 
 interface Props {
   params: Promise<{ bookId: string; chapter: string }>;
-  searchParams: Promise<{ v?: string }>;
+  searchParams: Promise<{ v?: string; focus?: string }>;
 }
 
 export default async function ChapterPage({ params, searchParams }: Props) {
   const { bookId, chapter } = await params;
-  const { v } = await searchParams;
+  const { v, focus } = await searchParams;
+  const autoFocus = focus === "1";
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -68,6 +69,7 @@ export default async function ChapterPage({ params, searchParams }: Props) {
         initialBookmarks={bookmarks ?? []}
         initialNotes={notes ?? []}
         bibleId={bibleId}
+        autoFocus={autoFocus}
       />
       <NavBar />
     </div>

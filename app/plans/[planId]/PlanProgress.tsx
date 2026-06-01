@@ -3,6 +3,20 @@
 import { useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { BIBLE_BOOKS } from "@/lib/bible-api";
+
+/** Parse "Genesis 1" or "John 3-5" → { bookId, chapter } */
+function parseRef(ref: string): { bookId: string; chapter: number } | null {
+  const m = ref.trim().match(/^(.+?)\s+(\d+)(?:-\d+)?$/);
+  if (!m) return null;
+  const name = m[1].trim().toLowerCase();
+  const book = BIBLE_BOOKS.find(b =>
+    b.name.toLowerCase() === name ||
+    b.name.toLowerCase().replace(/\s/g, "") === name.replace(/\s/g, "")
+  );
+  if (!book) return null;
+  return { bookId: book.id, chapter: parseInt(m[2]) };
+}
 
 interface Props {
   planId: string;
@@ -121,40 +135,92 @@ export default function PlanProgress({ planId, plan, isBuiltIn, userPlan, comple
         {readings.map((day: any) => {
           const dayReadings: string[] = day.readings ?? [day.reference ?? `Day ${day.day}`];
           const allDone = dayReadings.every((ref) => completions[`${day.day}:${ref}`]);
+          // Find the first incomplete day to mark as "today"
+          const firstIncomplete = readings.find((d: any) => {
+            const refs: string[] = d.readings ?? [d.reference ?? `Day ${d.day}`];
+            return !refs.every((r) => completions[`${d.day}:${r}`]);
+          });
+          const isToday = enrolled && firstIncomplete?.day === day.day;
+
           return (
             <div key={day.day} style={{
-              background: "var(--color-bg-card)", border: "1px solid var(--color-rule)",
+              background: "var(--color-bg-card)",
+              border: `1px solid ${isToday ? "var(--color-accent)" : "var(--color-rule)"}`,
               borderRadius: 12, padding: "14px 18px", boxShadow: "var(--shadow-card)",
-              opacity: allDone ? 0.7 : 1,
+              opacity: allDone ? 0.65 : 1,
             }}>
-              <div style={{ fontWeight: 600, fontSize: 13, color: "var(--color-ink-3)", marginBottom: 6 }}>
-                Day {day.day}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontWeight: 600, fontSize: 13, color: "var(--color-ink-3)" }}>Day {day.day}</span>
+                  {isToday && (
+                    <span style={{
+                      fontSize: 10, fontWeight: 700, color: "var(--color-accent)",
+                      background: "var(--color-accent-soft)", padding: "2px 7px", borderRadius: 8,
+                    }}>Today</span>
+                  )}
+                  {allDone && <span style={{ fontSize: 11, color: "var(--color-green)" }}>✓ Complete</span>}
+                </div>
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {dayReadings.map((ref) => {
                   const key = `${day.day}:${ref}`;
                   const done = completions[key];
+                  const parsed = parseRef(ref);
+
                   return (
                     <div key={ref} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      {/* Checkbox */}
                       {enrolled && (
                         <button onClick={() => toggleReading(day.day, ref)}
                           style={{
-                            width: 20, height: 20, borderRadius: 4,
+                            width: 20, height: 20, borderRadius: 4, flexShrink: 0,
                             border: `2px solid ${done ? "var(--color-accent)" : "var(--color-rule)"}`,
                             background: done ? "var(--color-accent)" : "transparent",
                             cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                            flexShrink: 0,
                           }}>
                           {done && <span style={{ color: "#fff", fontSize: 12 }}>✓</span>}
                         </button>
                       )}
+
+                      {/* Reference text */}
                       <span style={{
-                        fontSize: 14, color: "var(--color-ink)",
+                        flex: 1, fontSize: 15, color: done ? "var(--color-ink-3)" : "var(--color-ink)",
                         textDecoration: done ? "line-through" : "none",
                         fontFamily: "var(--font-instrument-serif, serif)",
                       }}>
                         {ref}
                       </span>
+
+                      {/* Read buttons */}
+                      {parsed && (
+                        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                          <Link
+                            href={`/read/${parsed.bookId}/${parsed.chapter}`}
+                            style={{
+                              padding: "4px 10px", borderRadius: 7, fontSize: 12, fontWeight: 500,
+                              border: "1px solid var(--color-rule)",
+                              background: "var(--color-bg-deep)",
+                              color: "var(--color-ink-2)", textDecoration: "none",
+                              display: "flex", alignItems: "center", gap: 4,
+                            }}
+                          >
+                            📖 Read
+                          </Link>
+                          <Link
+                            href={`/read/${parsed.bookId}/${parsed.chapter}?focus=1`}
+                            style={{
+                              padding: "4px 10px", borderRadius: 7, fontSize: 12, fontWeight: 600,
+                              border: "none",
+                              background: "var(--color-accent)",
+                              color: "#fff", textDecoration: "none",
+                              display: "flex", alignItems: "center", gap: 4,
+                            }}
+                          >
+                            ◈ Focus
+                          </Link>
+                        </div>
+                      )}
                     </div>
                   );
                 })}

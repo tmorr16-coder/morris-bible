@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import type { BibleChapter, BibleVerse, BibleVersion } from "@/lib/bible-api";
+import FocusReader from "./FocusReader";
 
 interface Props {
   book: { id: string; name: string; chapters: number; testament: "OT" | "NT" };
@@ -19,6 +20,7 @@ interface Props {
   initialBookmarks: any[];
   initialNotes: any[];
   bibleId: string;
+  autoFocus?: boolean;
 }
 
 const HIGHLIGHT_COLORS = [
@@ -31,6 +33,7 @@ const HIGHLIGHT_COLORS = [
 export default function ChapterReader({
   book, chapterNum, chapterData, version, allVersions,
   prevChapter, nextChapter, userId, initialHighlights, initialBookmarks, initialNotes, bibleId,
+  autoFocus = false,
 }: Props) {
   const router = useRouter();
   const db = createClient() as any;
@@ -49,6 +52,7 @@ export default function ChapterReader({
 
   // ── TTS state ─────────────────────────────────────────────
   const [speaking, setSpeaking] = useState(false);
+  const [focusMode, setFocusMode] = useState(autoFocus && !!chapterData);
   const [paused, setPaused] = useState(false);
   const [readingVerseIdx, setReadingVerseIdx] = useState<number | null>(null);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
@@ -260,7 +264,24 @@ export default function ChapterReader({
               {bookmarked ? "🔖" : "🗂"}
             </button>
 
-            {/* Read aloud from start */}
+            {/* Focus Mode */}
+            {chapterData && (
+              <button
+                onClick={() => setFocusMode(true)}
+                title="Focus mode: word-by-word with audio"
+                style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  padding: "7px 14px", borderRadius: 8,
+                  border: "1px solid var(--color-rule)",
+                  background: "var(--color-bg-card)",
+                  color: "var(--color-ink-2)", fontSize: 12, fontWeight: 500, cursor: "pointer",
+                }}
+              >
+                ◈ Focus
+              </button>
+            )}
+
+          {/* Read aloud from start */}
             {!speaking ? (
               <button onClick={() => speakFrom(0)}
                 style={{
@@ -588,6 +609,17 @@ export default function ChapterReader({
             )}
           </div>
         </div>
+      )}
+
+      {/* ── Focus Reader overlay ── */}
+      {focusMode && chapterData && (
+        <FocusReader
+          book={book}
+          chapterNum={chapterNum}
+          chapterData={chapterData}
+          onClose={() => setFocusMode(false)}
+          initialVerseIdx={readingVerseIdx ?? 0}
+        />
       )}
     </div>
   );
