@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 
 const anthropic = new Anthropic();
 
@@ -136,9 +136,9 @@ export async function POST(req: NextRequest) {
       if (b < batches - 1) await new Promise((r) => setTimeout(r, 500));
     }
 
-    // Step 3: Save to database
+    // Step 3: Save to database — service client required for bible schema
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const db = supabase as any;
+    const db = createServiceClient() as any;
     const { data: plan, error: dbErr } = await db
       .schema("bible")
       .from("reading_plans")
