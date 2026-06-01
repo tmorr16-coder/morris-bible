@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import type { BibleChapter } from "@/lib/bible-api";
 
 const VOICE_STORAGE_KEY = "bible-focus-voice";
@@ -11,9 +12,11 @@ interface Props {
   chapterData: BibleChapter;
   onClose: () => void;
   initialVerseIdx?: number;
+  nextReadingHref?: string;
+  nextReadingLabel?: string;
 }
 
-export default function FocusReader({ book, chapterNum, chapterData, onClose, initialVerseIdx = 0 }: Props) {
+export default function FocusReader({ book, chapterNum, chapterData, onClose, initialVerseIdx = 0, nextReadingHref, nextReadingLabel }: Props) {
   const verses = chapterData.verses;
 
   // ── State ──────────────────────────────────────────────────
@@ -22,6 +25,8 @@ export default function FocusReader({ book, chapterNum, chapterData, onClose, in
   const [speaking, setSpeaking] = useState(false);
   const [paused, setPaused] = useState(false);
   const [done, setDone] = useState(false);
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const router = useRouter();
 
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [selectedVoice, setSelectedVoice] = useState<SpeechSynthesisVoice | null>(null);
@@ -192,6 +197,23 @@ export default function FocusReader({ book, chapterNum, chapterData, onClose, in
 
   useEffect(() => () => { window.speechSynthesis.cancel(); }, []);
 
+  // Auto-navigate to next reading when chapter is done
+  useEffect(() => {
+    if (!done || !nextReadingHref) return;
+    setCountdown(3);
+    const interval = setInterval(() => {
+      setCountdown(prev => {
+        if (prev === null || prev <= 1) {
+          clearInterval(interval);
+          router.push(nextReadingHref);
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [done, nextReadingHref, router]);
+
   const shortVoiceName = (v: SpeechSynthesisVoice) =>
     v.name.replace(/\(.*?\)/g, "").replace("Google", "").replace("Microsoft", "").trim();
 
@@ -305,13 +327,76 @@ export default function FocusReader({ book, chapterNum, chapterData, onClose, in
 
         {/* Done state */}
         {done && (
-          <div style={{ textAlign: "center", padding: "32px 20px", color: "#555" }}>
-            <div style={{ fontSize: 28, marginBottom: 8 }}>✓</div>
-            <div style={{ fontSize: 14, fontFamily: "system-ui" }}>Chapter complete</div>
-            <button onClick={() => startFrom(0)}
-              style={{ marginTop: 14, padding: "8px 20px", borderRadius: 8, border: "none", background: "#7c5cbf", color: "#fff", fontSize: 13, fontFamily: "system-ui", cursor: "pointer" }}>
-              Read again
-            </button>
+          <div style={{ textAlign: "center", padding: "40px 20px" }}>
+            <div style={{ fontSize: 36, marginBottom: 10 }}>✓</div>
+            <div style={{ fontSize: 18, color: "#c0b8a8", fontFamily: "var(--font-display, Georgia, serif)", marginBottom: 4 }}>
+              {book.name} {chapterNum} complete
+            </div>
+
+            {nextReadingHref && nextReadingLabel ? (
+              <div style={{ marginTop: 20 }}>
+                <div style={{ fontSize: 12, color: "#555", fontFamily: "system-ui", marginBottom: 12 }}>
+                  Up next
+                </div>
+                <div style={{ fontSize: 20, color: "#a78bdc", fontFamily: "var(--font-display, Georgia, serif)", marginBottom: 20 }}>
+                  {nextReadingLabel}
+                </div>
+
+                {/* Countdown ring */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16, flexWrap: "wrap" }}>
+                  <button
+                    onClick={() => { setCountdown(null); setDone(false); router.push(nextReadingHref); }}
+                    style={{
+                      padding: "12px 28px", borderRadius: 10, border: "none",
+                      background: "linear-gradient(135deg, #7c5cbf, #a78bdc)",
+                      color: "#fff", fontSize: 15, fontWeight: 600,
+                      fontFamily: "system-ui", cursor: "pointer",
+                      display: "flex", alignItems: "center", gap: 8,
+                    }}
+                  >
+                    Continue
+                    {countdown !== null && (
+                      <span style={{
+                        width: 24, height: 24, borderRadius: "50%",
+                        background: "rgba(255,255,255,0.25)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: 12, fontWeight: 700,
+                      }}>
+                        {countdown}
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setCountdown(null)}
+                    style={{
+                      padding: "12px 20px", borderRadius: 10,
+                      border: "1px solid #2a2a2f", background: "transparent",
+                      color: "#666", fontSize: 13, fontFamily: "system-ui", cursor: "pointer",
+                    }}
+                  >
+                    Pause
+                  </button>
+                </div>
+
+                {countdown === null && (
+                  <div style={{ marginTop: 14 }}>
+                    <button
+                      onClick={() => router.push(nextReadingHref)}
+                      style={{ background: "none", border: "none", color: "#7c5cbf", fontSize: 13, fontFamily: "system-ui", cursor: "pointer", textDecoration: "underline" }}
+                    >
+                      Go to {nextReadingLabel} →
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div style={{ marginTop: 20 }}>
+                <button onClick={() => startFrom(0)}
+                  style={{ padding: "10px 22px", borderRadius: 8, border: "none", background: "#7c5cbf", color: "#fff", fontSize: 14, fontFamily: "system-ui", cursor: "pointer" }}>
+                  Read again
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

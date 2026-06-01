@@ -21,6 +21,8 @@ interface Props {
   initialNotes: any[];
   bibleId: string;
   autoFocus?: boolean;
+  nextReadingHref?: string | null;
+  nextReadingLabel?: string | null;
 }
 
 const HIGHLIGHT_COLORS = [
@@ -33,7 +35,7 @@ const HIGHLIGHT_COLORS = [
 export default function ChapterReader({
   book, chapterNum, chapterData, version, allVersions,
   prevChapter, nextChapter, userId, initialHighlights, initialBookmarks, initialNotes, bibleId,
-  autoFocus = false,
+  autoFocus = false, nextReadingHref, nextReadingLabel,
 }: Props) {
   const router = useRouter();
   const db = createClient() as any;
@@ -619,6 +621,8 @@ export default function ChapterReader({
           chapterData={chapterData}
           onClose={() => setFocusMode(false)}
           initialVerseIdx={readingVerseIdx ?? 0}
+          nextReadingHref={nextReadingHref ?? undefined}
+          nextReadingLabel={nextReadingLabel ?? undefined}
         />
       )}
     </div>

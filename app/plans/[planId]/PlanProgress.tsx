@@ -193,34 +193,39 @@ export default function PlanProgress({ planId, plan, isBuiltIn, userPlan, comple
                       </span>
 
                       {/* Read buttons */}
-                      {parsed && (
-                        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                          <Link
-                            href={`/read/${parsed.bookId}/${parsed.chapter}`}
-                            style={{
-                              padding: "4px 10px", borderRadius: 7, fontSize: 12, fontWeight: 500,
-                              border: "1px solid var(--color-rule)",
-                              background: "var(--color-bg-deep)",
-                              color: "var(--color-ink-2)", textDecoration: "none",
-                              display: "flex", alignItems: "center", gap: 4,
-                            }}
-                          >
-                            📖 Read
-                          </Link>
-                          <Link
-                            href={`/read/${parsed.bookId}/${parsed.chapter}?focus=1`}
-                            style={{
-                              padding: "4px 10px", borderRadius: 7, fontSize: 12, fontWeight: 600,
-                              border: "none",
-                              background: "var(--color-accent)",
-                              color: "#fff", textDecoration: "none",
-                              display: "flex", alignItems: "center", gap: 4,
-                            }}
-                          >
-                            ◈ Focus
-                          </Link>
-                        </div>
-                      )}
+                      {parsed && (() => {
+                        // reading index within this day
+                        const rIdx = dayReadings.indexOf(ref);
+                        const focusParams = `focus=1&plan=${planId}&day=${day.day}&ridx=${rIdx}`;
+                        return (
+                          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                            <Link
+                              href={`/read/${parsed.bookId}/${parsed.chapter}`}
+                              style={{
+                                padding: "4px 10px", borderRadius: 7, fontSize: 12, fontWeight: 500,
+                                border: "1px solid var(--color-rule)",
+                                background: "var(--color-bg-deep)",
+                                color: "var(--color-ink-2)", textDecoration: "none",
+                                display: "flex", alignItems: "center", gap: 4,
+                              }}
+                            >
+                              📖 Read
+                            </Link>
+                            <Link
+                              href={`/read/${parsed.bookId}/${parsed.chapter}?${focusParams}`}
+                              style={{
+                                padding: "4px 10px", borderRadius: 7, fontSize: 12, fontWeight: 600,
+                                border: "none",
+                                background: "var(--color-accent)",
+                                color: "#fff", textDecoration: "none",
+                                display: "flex", alignItems: "center", gap: 4,
+                              }}
+                            >
+                              ◈ Focus
+                            </Link>
+                          </div>
+                        );
+                      })()}
                     </div>
                   );
                 })}
