@@ -363,47 +363,92 @@ export default function ChapterReader({
         </div>
       )}
 
-      {/* ── Verse text ── */}
+      {/* ── Verse text — one verse per row ── */}
       {chapterData && (
-        <div className="bible-prose">
+        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
           {chapterData.verses.map((verse, idx) => {
-            const hlColor = highlights[verse.id];
-            const hlDef   = HIGHLIGHT_COLORS.find((c) => c.key === hlColor);
+            const hlColor  = highlights[verse.id];
+            const hlDef    = HIGHLIGHT_COLORS.find((c) => c.key === hlColor);
             const hasNote  = notes[verse.number];
             const isReading = readingVerseIdx === idx;
+            const isSelected = selectedVerse?.id === verse.id;
 
             return (
-              <span key={verse.id} className={`verse-wrap${isReading ? " reading-active" : ""}`}>
-                {/* Play-from-here button (shown on hover via CSS) */}
-                <button
-                  className="verse-play-btn"
-                  title={`Read aloud from verse ${verse.number}`}
-                  onClick={(e) => { e.stopPropagation(); speakFrom(idx); }}
-                >
-                  ▶
-                </button>
-                <sup
-                  className="verse-number"
-                  onClick={() => setSelectedVerse(selectedVerse?.id === verse.id ? null : verse)}
-                  style={{ cursor: "pointer" }}
-                >
-                  {verse.number}
-                </sup>
-                <span
-                  className={`verse-text${hlColor ? ` hl-${hlColor}` : ""}`}
-                  style={hlDef ? { background: hlDef.bg } : {}}
-                  onClick={() => setSelectedVerse(selectedVerse?.id === verse.id ? null : verse)}
-                >
+              <div
+                key={verse.id}
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: 14,
+                  padding: "10px 14px",
+                  borderRadius: 10,
+                  background: isReading
+                    ? "rgba(107,59,124,0.08)"
+                    : isSelected
+                    ? "var(--color-accent-soft)"
+                    : hlDef
+                    ? hlDef.bg
+                    : "transparent",
+                  border: isSelected
+                    ? "1px solid var(--color-accent)"
+                    : "1px solid transparent",
+                  cursor: "pointer",
+                  transition: "background 120ms",
+                }}
+                onClick={() => setSelectedVerse(isSelected ? null : verse)}
+              >
+                {/* Left: verse number + play button */}
+                <div style={{
+                  display: "flex", flexDirection: "column", alignItems: "center",
+                  gap: 4, flexShrink: 0, paddingTop: 2,
+                }}>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); speakFrom(idx); }}
+                    title={`Read from verse ${verse.number}`}
+                    style={{
+                      background: isReading ? "var(--color-accent)" : "transparent",
+                      border: "none", cursor: "pointer", padding: "2px 4px",
+                      borderRadius: 4, fontSize: 10,
+                      color: isReading ? "#fff" : "var(--color-ink-4)",
+                      opacity: isReading ? 1 : 0.5,
+                      transition: "opacity 120ms",
+                      lineHeight: 1,
+                    }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = "1"; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = isReading ? "1" : "0.5"; }}
+                  >
+                    ▶
+                  </button>
+                  <span style={{
+                    fontSize: 11, fontWeight: 700,
+                    color: isReading ? "var(--color-accent)" : "var(--color-ink-4)",
+                    fontFamily: "var(--font-sans)",
+                    minWidth: 20, textAlign: "center",
+                    letterSpacing: "0.02em",
+                  }}>
+                    {verse.number}
+                  </span>
+                </div>
+
+                {/* Right: verse text */}
+                <div style={{
+                  fontFamily: "var(--font-display)",
+                  fontSize: 18,
+                  lineHeight: 1.75,
+                  color: "var(--color-ink)",
+                  flex: 1,
+                  letterSpacing: "0.01em",
+                }}>
                   {verse.text}
-                </span>
-                {hasNote && (
-                  <span
-                    title="You have a note here"
-                    style={{ fontSize: 9, color: "var(--color-accent)", verticalAlign: "super", marginLeft: 2, cursor: "pointer" }}
-                    onClick={() => setSelectedVerse(verse)}
-                  >✎</span>
-                )}{" "}
-              </span>
+                  {hasNote && (
+                    <span
+                      title="You have a note here"
+                      style={{ fontSize: 10, color: "var(--color-accent)", marginLeft: 6, cursor: "pointer" }}
+                      onClick={(e) => { e.stopPropagation(); setSelectedVerse(verse); }}
+                    >✎</span>
+                  )}
+                </div>
+              </div>
             );
           })}
         </div>

@@ -3,6 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import PlatformMenu from "@/components/PlatformMenu";
 import NavBar from "@/components/NavBar";
 import Link from "next/link";
+import PlanUploader from "./_components/PlanUploader";
 
 const BUILT_IN_PLANS = [
   { id: "bible-in-a-year",   title: "Bible in a Year",         description: "Read the entire Bible in 365 days — Old and New Testament together.", duration_days: 365 },
@@ -34,12 +35,15 @@ export default async function PlansPage() {
       <div style={{ maxWidth: 720, margin: "0 auto", padding: "24px 20px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
           <h1 style={{ fontFamily: "var(--font-instrument-serif, serif)", fontSize: 26, fontWeight: 400, margin: 0 }}>Reading Plans</h1>
-          <Link href="/plans/generate" style={{
-            padding: "8px 16px", background: "var(--color-accent)", color: "#fff",
-            borderRadius: 8, textDecoration: "none", fontSize: 13, fontWeight: 500,
-          }}>
-            ✨ Generate plan
-          </Link>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <PlanUploader />
+            <Link href="/plans/generate" style={{
+              padding: "8px 16px", background: "var(--color-accent)", color: "#fff",
+              borderRadius: 8, textDecoration: "none", fontSize: 13, fontWeight: 500,
+            }}>
+              ✨ Generate plan
+            </Link>
+          </div>
         </div>
 
         {/* My active plans */}
