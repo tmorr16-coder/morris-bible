@@ -28,7 +28,7 @@ const nextWeekISO = () => new Date(Date.now() + 7 * 86_400_000).toISOString().sl
 export default function QuickAddReminder({
   sourceApp,
 }: {
-  sourceApp: "hub" | "health" | "finance" | "investments" | "student-success" | "bible";
+  sourceApp: "hub" | "health" | "finance" | "investments" | "student-success" | "bible" | "career";
 }) {
   const { user } = useCurrentUser();
   const [open, setOpen] = useState(false);
