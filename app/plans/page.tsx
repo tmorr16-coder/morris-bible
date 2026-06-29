@@ -21,13 +21,19 @@ export default async function PlansPage() {
 
   const db = createServiceClient() as any;
 
-  const [{ data: userPlans }, { data: publicPlans }, { data: familyPlanRows }] = await Promise.all([
+  const [{ data: userPlans }, { data: publicPlans }] = await Promise.all([
     db.schema("bible").from("user_plans").select("*, plan:reading_plans(*)").eq("user_id", user.id).order("started_at", { ascending: false }),
     db.schema("bible").from("reading_plans").select("*").eq("is_public", true).order("created_at", { ascending: false }).limit(20),
-    db.schema("bible").from("family_plans").select("*, plan:reading_plans(*), members:family_plan_members(user_id), my_progress:family_plan_progress(day_number, reading_ref)").eq("family_plan_progress.user_id", user.id).limit(10).catch(() => ({ data: [] })),
   ]);
+
+  // Graceful fallback if family_plans table not yet migrated
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const familyPlans: any[] = familyPlanRows ?? [];
+  let familyPlans: any[] = [];
+  try {
+    const { data: fp } = await db.schema("bible").from("family_plans")
+      .select("*, plan:reading_plans(*), members:family_plan_members(user_id)").limit(10);
+    familyPlans = fp ?? [];
+  } catch { /* table not yet created */ }
 
   const menuUser = { email: user.email, name: user.user_metadata?.full_name ?? user.email, avatarUrl: user.user_metadata?.avatar_url ?? null };
   const enrolledIds = new Set((userPlans ?? []).map((up: any) => up.plan_id));

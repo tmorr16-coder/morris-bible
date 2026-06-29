@@ -13,10 +13,14 @@ export default async function ReadPage() {
   // Load user's preferred translation
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = createServiceClient() as any;
-  const { data: prefs } = await db
-    .schema("bible").from("user_preferences")
-    .select("preferred_bible_id").eq("user_id", user.id).maybeSingle();
-  const preferredBibleId = prefs?.preferred_bible_id ?? "de4e12af7f28f599-02";
+  // Graceful fallback if user_preferences table not yet migrated
+  let preferredBibleId = "de4e12af7f28f599-02";
+  try {
+    const { data: prefs } = await db
+      .schema("bible").from("user_preferences")
+      .select("preferred_bible_id").eq("user_id", user.id).maybeSingle();
+    if (prefs?.preferred_bible_id) preferredBibleId = prefs.preferred_bible_id;
+  } catch { /* table not yet created */ }
 
   const menuUser = { email: user.email, name: user.user_metadata?.full_name ?? user.email, avatarUrl: user.user_metadata?.avatar_url ?? null };
 

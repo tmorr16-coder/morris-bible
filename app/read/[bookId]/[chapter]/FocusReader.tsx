@@ -41,28 +41,33 @@ export default function FocusReader({ book, chapterNum, chapterData, onClose, in
   useEffect(() => { selectedVoiceRef.current = selectedVoice; }, [selectedVoice]);
   useEffect(() => { speechRateRef.current = speechRate; }, [speechRate]);
 
-  // ── Load voices + restore saved preference ─────────────────
+  // ── Load voices — prefer platform preference from hub settings ─
   useEffect(() => {
+    // Fetch platform TTS preference (stored in hub.preferences)
+    let platformVoiceName: string | null = null;
+    let platformSpeed: number | null = null;
+    fetch("/api/tts-prefs").then(r => r.ok ? r.json() : null).then(data => {
+      if (data?.tts_voice) platformVoiceName = data.tts_voice;
+      if (data?.tts_speed) { platformSpeed = data.tts_speed; setSpeechRate(platformSpeed); speechRateRef.current = platformSpeed; }
+    }).catch(() => {});
+
     function loadVoices() {
       const all = window.speechSynthesis.getVoices();
       const eng = all.filter(v => v.lang.startsWith("en") && !v.name.includes("compact"));
       if (eng.length === 0) return;
       setVoices(eng);
 
-      // Restore saved voice preference
-      const saved = typeof window !== "undefined" ? localStorage.getItem(VOICE_STORAGE_KEY) : null;
-      const restore = saved ? eng.find(v => v.name === saved) : null;
-      if (restore) {
-        setSelectedVoice(restore);
-        selectedVoiceRef.current = restore;
-      } else {
-        const pref = eng.find(v =>
-          v.name.includes("Google US English") || v.name.includes("Samantha") ||
-          v.name.includes("Alex") || v.name === "Karen"
-        ) ?? eng[0];
-        setSelectedVoice(pref);
-        selectedVoiceRef.current = pref;
-      }
+      // Priority: 1) platform preference, 2) localStorage legacy, 3) quality defaults
+      const fromPlatform = platformVoiceName ? eng.find(v => v.name === platformVoiceName) : null;
+      const fromLocal = !fromPlatform ? eng.find(v => v.name === localStorage.getItem(VOICE_STORAGE_KEY)) : null;
+      const fromDefault = eng.find(v =>
+        v.name.includes("Samantha") || v.name.includes("Alex") ||
+        v.name.includes("Microsoft Aria") || v.name.includes("Google US English")
+      ) ?? eng[0];
+
+      const pref = fromPlatform ?? fromLocal ?? fromDefault;
+      setSelectedVoice(pref);
+      selectedVoiceRef.current = pref;
     }
     loadVoices();
     window.speechSynthesis.onvoiceschanged = loadVoices;

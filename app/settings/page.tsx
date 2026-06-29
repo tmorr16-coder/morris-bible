@@ -14,12 +14,16 @@ export default async function SettingsPage() {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = createServiceClient() as any;
-  const { data: prefs } = await db
-    .schema("bible")
-    .from("user_preferences")
-    .select("preferred_bible_id, reminder_time, font_size")
-    .eq("user_id", user.id)
-    .maybeSingle();
+
+  // Graceful fallback if user_preferences table not yet migrated
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let prefs: any = null;
+  try {
+    const { data } = await db.schema("bible").from("user_preferences")
+      .select("preferred_bible_id, reminder_time, font_size")
+      .eq("user_id", user.id).maybeSingle();
+    prefs = data;
+  } catch { /* table not yet created */ }
 
   const menuUser = { email: user.email, name: user.user_metadata?.full_name ?? user.email, avatarUrl: user.user_metadata?.avatar_url ?? null };
 
