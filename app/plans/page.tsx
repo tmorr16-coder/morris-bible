@@ -21,10 +21,13 @@ export default async function PlansPage() {
 
   const db = createServiceClient() as any;
 
-  const [{ data: userPlans }, { data: publicPlans }] = await Promise.all([
+  const [{ data: userPlans }, { data: publicPlans }, { data: familyPlanRows }] = await Promise.all([
     db.schema("bible").from("user_plans").select("*, plan:reading_plans(*)").eq("user_id", user.id).order("started_at", { ascending: false }),
     db.schema("bible").from("reading_plans").select("*").eq("is_public", true).order("created_at", { ascending: false }).limit(20),
+    db.schema("bible").from("family_plans").select("*, plan:reading_plans(*), members:family_plan_members(user_id), my_progress:family_plan_progress(day_number, reading_ref)").eq("family_plan_progress.user_id", user.id).limit(10).catch(() => ({ data: [] })),
   ]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const familyPlans: any[] = familyPlanRows ?? [];
 
   const menuUser = { email: user.email, name: user.user_metadata?.full_name ?? user.email, avatarUrl: user.user_metadata?.avatar_url ?? null };
   const enrolledIds = new Set((userPlans ?? []).map((up: any) => up.plan_id));
@@ -115,8 +118,48 @@ export default async function PlansPage() {
             </div>
           </div>
         )}
+
+        {/* Family Reading Plans */}
+        <div style={{ marginTop: 32 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-ink-2)" }}>👨‍👩‍👧 Family plans</div>
+          </div>
+          {familyPlans.length === 0 ? (
+            <div style={{ padding: "20px 16px", background: "var(--color-bg-card)", border: "1px solid var(--color-rule)", borderRadius: 10, textAlign: "center" }}>
+              <div style={{ fontSize: 13, color: "var(--color-ink-3)", marginBottom: 8 }}>No family reading plans yet.</div>
+              <div style={{ fontSize: 11, color: "var(--color-ink-4)" }}>
+                Start any reading plan, then share it with family from the plan&apos;s page to read together and track progress.
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+              {familyPlans.map((fp: any) => {
+                const memberCount = fp.members?.length ?? 0;
+                const myCompleted = fp.my_progress?.length ?? 0;
+                const totalDays = fp.plan?.duration_days ?? 1;
+                const pct = Math.round((myCompleted / totalDays) * 100);
+                return (
+                  <Link key={fp.id} href={`/plans/${fp.plan_id}?familyPlanId=${fp.id}`}
+                    style={{ display: "block", padding: "14px 16px", background: "var(--color-bg-card)", border: "1px solid var(--color-rule)", borderRadius: 10, textDecoration: "none" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: "var(--color-ink)" }}>{fp.name}</div>
+                      <span style={{ fontSize: 11, color: "var(--color-ink-4)" }}>{memberCount} member{memberCount !== 1 ? "s" : ""}</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: "var(--color-ink-3)", marginBottom: 8 }}>{fp.plan?.title} · {totalDays} days</div>
+                    <div style={{ height: 4, background: "var(--color-rule)", borderRadius: 2, overflow: "hidden" }}>
+                      <div style={{ height: "100%", width: `${pct}%`, background: "var(--color-accent)", borderRadius: 2, transition: "width 0.3s" }} />
+                    </div>
+                    <div style={{ fontSize: 11, color: "var(--color-ink-4)", marginTop: 4 }}>Your progress: {pct}%</div>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
       </div>
-      <NavBar />
+      <NavBar active="plans" />
     </div>
   );
 }

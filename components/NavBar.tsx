@@ -3,15 +3,16 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 
 const TABS = [
-  { href: "/dashboard",  label: "Home",      icon: "⛪" },
-  { href: "/read",       label: "Read",      icon: "📖" },
-  { href: "/plans",      label: "Plans",     icon: "📋" },
-  { href: "/chat",       label: "Chat",      icon: "💬" },
-  { href: "/notes",      label: "Notes",     icon: "📝" },
-  { href: "/challenges", label: "Challenges",icon: "🏆" },
+  { href: "/dashboard",  label: "Home",    icon: "⛪" },
+  { href: "/read",       label: "Read",    icon: "📖" },
+  { href: "/search",     label: "Search",  icon: "🔍" },
+  { href: "/plans",      label: "Plans",   icon: "📋" },
+  { href: "/chat",       label: "Chat",    icon: "💬" },
+  { href: "/notes",      label: "Notes",   icon: "📝" },
+  { href: "/settings",   label: "Settings",icon: "⚙️" },
 ];
 
-export default function NavBar() {
+export default function NavBar({ active }: { active?: string } = {}) {
   const pathname = usePathname();
   return (
     <nav style={{
@@ -24,7 +25,7 @@ export default function NavBar() {
       paddingBottom: "env(safe-area-inset-bottom)",
     }}>
       {TABS.map((tab) => {
-        const active = pathname === tab.href || (tab.href !== "/dashboard" && pathname.startsWith(tab.href));
+        const isActive = active ? active === tab.href.slice(1) : pathname === tab.href || (tab.href !== "/dashboard" && pathname.startsWith(tab.href));
         return (
           <Link
             key={tab.href}
@@ -36,9 +37,9 @@ export default function NavBar() {
               alignItems: "center",
               padding: "10px 4px 8px",
               textDecoration: "none",
-              color: active ? "var(--color-accent)" : "var(--color-ink-3)",
+              color: isActive ? "var(--color-accent)" : "var(--color-ink-3)",
               fontSize: 10,
-              fontWeight: active ? 600 : 500,
+              fontWeight: isActive ? 600 : 500,
               fontFamily: "var(--font-geist, system-ui), sans-serif",
               gap: 3,
               transition: "color 100ms",

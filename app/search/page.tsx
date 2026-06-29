@@ -2,19 +2,17 @@ import { redirect } from "next/navigation";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import PlatformMenu from "@/components/PlatformMenu";
 import NavBar from "@/components/NavBar";
-import { BIBLE_BOOKS } from "@/lib/bible-api";
-import BookPickerClient from "./_components/BookPickerClient";
+import { KNOWN_VERSIONS } from "@/lib/bible-api";
+import SearchClient from "./_components/SearchClient";
 
-export default async function ReadPage() {
+export default async function SearchPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/");
 
-  // Load user's preferred translation
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = createServiceClient() as any;
-  const { data: prefs } = await db
-    .schema("bible").from("user_preferences")
+  const { data: prefs } = await db.schema("bible").from("user_preferences")
     .select("preferred_bible_id").eq("user_id", user.id).maybeSingle();
   const preferredBibleId = prefs?.preferred_bible_id ?? "de4e12af7f28f599-02";
 
@@ -25,11 +23,11 @@ export default async function ReadPage() {
       <PlatformMenu currentApp="bible" user={menuUser} />
       <div style={{ maxWidth: 720, margin: "0 auto", padding: "24px 20px" }}>
         <h1 style={{ fontFamily: "var(--font-instrument-serif, serif)", fontSize: 26, fontWeight: 400, margin: "0 0 20px" }}>
-          Select a book
+          Search the Bible
         </h1>
-        <BookPickerClient books={BIBLE_BOOKS} preferredBibleId={preferredBibleId} />
+        <SearchClient versions={KNOWN_VERSIONS} defaultBibleId={preferredBibleId} />
       </div>
-      <NavBar active="read" />
+      <NavBar active="search" />
     </div>
   );
 }
